@@ -1,0 +1,166 @@
+---
+title: "Review of Global & National Launch Trends Over The Years"
+author: "M.Kee"
+date: "`r format(Sys.time(), '%A, %B %d, %Y')`"
+output: ioslides_presentation
+---
+
+```{r Setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# Clearing variables before program execution
+rm(list = ls())
+
+
+# Loading necessary packages
+library(tidyverse)
+library(lubridate)
+library(GGally)
+library(RColorBrewer)
+library(leaflet)
+library(plotly)
+library(htmltools)
+library(knitr)
+
+
+# User-defined Variables that define desired working directory
+cwdir <- "C:/Users/mkee1/Documents/Coursera-JH-Data-Science/09_Developing_Data_Products/Week 3/Peer Review Projects/Data/"
+
+# Setting working directory using user-defined function "setdesiredwd"
+source('~/setdesiredwd.R')
+setdesiredwd(cwdir)
+
+# Reading space launch & lat-long data into R using readr package
+spaceDat <- read_csv("./GlobalSpaceLaunches/Global Space Launches.csv", col_types = cols(`Company Name` = "c", Location = "c", Detail = "c", `Status Rocket` = "c", Rocket = "n", `Status Mission` = "c", `Country of Launch` = "c", `Companys Country of Origin` = "c", `Private or State Run` = "c", DateTime = "_", Year = "n", Month = "n", Day = "n", Date = "_", Time = "_"))
+
+spaceDat$`Country of Launch` <- recode(spaceDat$`Country of Launch`, "USA" = "United States")
+spaceDat$`Companys Country of Origin` <- recode(spaceDat$`Companys Country of Origin`, "USA" = "United States")
+
+names(spaceDat) <- c("Company Name", "Location", "Detail", "Status Rocket", "Rocket Cost (Millions)", "Status Mission", "Country of Launch", "Companys Country of Origin", "Private or State Run", "Year", "Month", "Date")
+
+LatLongWorld <- read_csv("./LatLong_WorldCountries/world_country_and_usa_states_latitude_and_longitude_values.csv", col_types = cols(country_code = "c", latitude = "d", longitude = "d", country = "c", usa_state_code = "_", usa_state_latitude = "_", usa_state_longitude = "_", usa_state = "_"))
+
+LatLongWorld <- LatLongWorld %>% add_row(country_code = "PO", latitude = 0, longitude = -154, country = "Sea Launch")
+
+names(LatLongWorld) <- c("Country Code", "Latitude (deg)", "Longitude (deg)", "Country")
+```
+
+
+
+## Presentation Overview
+- Background & Purpose
+
+- Exploration of Launch Trends
+    + Total Number of Launches Historically by Country (Map)
+    + Total Number of Global Launches Over Time by Private/State Classification
+    + Total Number of US Launches Over Time by Private/State Classification
+
+
+
+## Background & Purpose
+- Over the past century in the United States, space operations have typically been planned, organized, and executed by government entities.
+
+- Paradigm shift in the United States (US) as a result of: 
+    1) Decommissioning of the National Aeronautics and Space Administration (NASA) Space Shuttle program 
+    2) The allowance and emergence for research and development of Commercial Orbital Transportation Services
+
+- **Goal of Briefing:** To explore global & national launch trends over the years.
+
+
+
+## Data Description
+The data used for this exercise are two Kaggle datasets, which are as follows: 
+        
+1. [Latitude and Longitude for Every Country & State](https://www.kaggle.com/paultimothymooney/latitude-and-longitude-for-every-country-and-state)
+
+2. [Privatization of Space](https://www.kaggle.com/davidroberts13/one-small-step-for-data)
+
+
+
+## Total Number of Launches Historically by Country (Map)
+
+```{r Initializing Workspace & Loading Data, message=FALSE, warning=FALSE}
+# Summarizing based on Country of Launch & whether or not the launch is 
+# commercial/private or is  for the State (or Government)
+sumDat <- spaceDat %>% 
+        select(`Country of Launch`, `Private or State Run`) %>%
+        group_by(`Country of Launch`) %>%
+        summarise(n())
+
+
+# Joining the summary table & the lat-long data table together in order to get 
+# lat-long information in the same table & renaming columns
+jointData <- left_join(sumDat, LatLongWorld, by = c("Country of Launch" = "Country"))
+names(jointData) <- c("Country of Launch", "Numuber Of Ops", "Country Code", "Latitude (deg)", "Longitude (deg)")
+jointData <- jointData %>% arrange(desc(`Numuber Of Ops`))
+
+
+# Code for data visualization using the leaflet R package. 
+content <- paste0("<b>Country: </b>", jointData$`Country of Launch`, "<br/>",
+                 "<b>Total Number of Launches: </b>", jointData$`Numuber Of Ops`)
+
+
+leaflet(jointData) %>% addProviderTiles(providers$Esri.NatGeoWorldMap) %>%
+  addAwesomeMarkers(~`Longitude (deg)`, ~`Latitude (deg)`, popup = content)
+```
+
+
+
+## Countries With The Most Launches Historically 
+```{r Countries with Most Launches, message=FALSE, warning=FALSE, echo = FALSE}
+kable(head(jointData))
+```
+
+
+
+## Total Number of Global Launches Over Time by Private/State Classification
+
+```{r Data Manipulation & Visualization 2, message=FALSE, warning=FALSE, echo=FALSE}
+# Summarizing based on Year, Country of Launch, & whether or not the launch is 
+# commercial/private or is for the State (or Government)
+sumDat2 <- spaceDat %>% 
+        select(`Country of Launch`, `Private or State Run`, Year) %>%
+        group_by(Year, `Private or State Run`) %>%
+        summarise(n())
+
+# Renaming, sorting, & reformatting columns
+names(sumDat2) <- c("Year", "Private or State?", "Number Of Ops")
+sumDat2 <- sumDat2 %>% arrange(Year)
+
+# Graph: Number of Ops vs. Year by Private/State Classification
+sumDat2 %>% 
+  plot_ly(x = ~Year, y = ~`Number Of Ops`, color = ~factor(`Private or State?`), type = "scatter", mode = "line") %>% layout(xaxis = list(title = 'Year'), yaxis = list(title = 'Number of Launch Operations'))
+```
+
+
+
+## Total Number of US Launches Over Time by Private/State Classification
+
+```{r Data Manipulation & Visualization 3, message=FALSE, warning=FALSE, echo=FALSE}
+# Summarizing based on Year, Country of Launch, & whether or not the launch is 
+# commercial/private or is for the State (or Government)
+sumDat3 <- spaceDat %>% 
+        select(`Country of Launch`, `Private or State Run`, Year) %>%
+        filter(`Country of Launch` == "United States") %>%
+        group_by(`Country of Launch`, `Private or State Run`, Year) %>%
+        summarise(n())
+
+
+## Renaming, sorting, & reformatting columns
+names(sumDat3) <- c("Country of Launch", "Private or State?", "Year", "Number Of Ops")
+sumDat3 <- sumDat3 %>% arrange(Year)
+
+# Graph: Number of US Ops vs. Year by Private/State Classification
+sumDat3 %>% 
+  plot_ly(x = ~Year, y = ~`Number Of Ops`, color = ~factor(`Private or State?`), type = "scatter", mode = "line") %>% layout(xaxis = list(title = 'Year'), yaxis = list(title = 'Number of Launch Operations'))
+```
+
+
+
+## Summary & Conclusions
+- Judging from the numbers, space exploration has always been important to many countries historically.
+
+- State operated launches were predominate in the earlier years; however, commercial/private operated launches are increasing in the later years.
+    + This point is easily observed from the US data displayed in the the plot showing the "Total Number of US Launches Over Time by Private/State. Classification"
+    
+- New innovations are rapidly ushering in an unprecedented day of space operations and making it accessible to more people worldwide.
